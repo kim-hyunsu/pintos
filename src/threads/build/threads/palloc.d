@@ -4,4 +4,4 @@ threads/palloc.o: ../../threads/palloc.c ../../threads/palloc.h \
   ../../lib/round.h ../../lib/stdio.h ../../lib/stdarg.h \
   ../../lib/kernel/stdio.h ../../lib/string.h ../../threads/init.h \
   ../../threads/loader.h ../../threads/synch.h ../../lib/kernel/list.h \
-  ../../threads/vaddr.h
+  ../../threads/thread.h ../../threads/vaddr.h

@@ -3,6 +3,7 @@
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
+#include <list.h>
 #include "threads/interrupt.h"
 #include "threads/io.h"
 #include "threads/synch.h"
@@ -28,6 +29,10 @@ static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
+static bool order_by_ticks(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+// Project #1
+static struct list waiting_list;
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
@@ -44,6 +49,9 @@ timer_init (void)
   outb (0x40, count >> 8);
 
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+
+  // Prject #1
+  list_init(&waiting_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -99,8 +107,12 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  struct thread* t = thread_current();
+  enum intr_level prev_level = intr_disable();
+  t->ticks = start + ticks;
+  list_insert_ordered(&waiting_list, &t->elem, &order_by_ticks, NULL);
+  thread_block();
+  intr_set_level(prev_level);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -135,8 +147,17 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
+  struct thread *t;
   ticks++;
-  thread_tick ();
+  while (!list_empty(&waiting_list)) {
+    t = list_entry(list_front(&waiting_list), struct thread, elem);
+    if (timer_ticks() >= t->ticks) {
+      list_remove(&t->elem);
+      thread_unblock(t);
+      continue;
+    }
+    break;
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -202,3 +223,12 @@ real_time_sleep (int64_t num, int32_t denom)
     }
 }
 
+static bool order_by_ticks(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct thread *t_a = list_entry(a, struct thread, elem);
+  struct thread *t_b = list_entry(b, struct thread, elem);
+  if (t_a->ticks < t_b->ticks)
+    return 1;
+  if (t_a->ticks == t_b->ticks)
+    return t_a->priority >= t_b->priority;
+  return 0;
+}

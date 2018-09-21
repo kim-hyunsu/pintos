@@ -70,6 +70,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static bool order_by_priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -196,8 +197,11 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
 
+  // Project #1
+  thread_unblock(t);
+  if (thread_current()->priority < t->priority)
+    thread_yield();
   /* Add to run queue. */
-  thread_unblock (t);
 
   return tid;
 }
@@ -235,7 +239,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem, &order_by_priority_desc, NULL);;
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -304,7 +308,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (curr != idle_thread) 
-    list_push_back (&ready_list, &curr->elem);
+    list_insert_ordered(&ready_list, &curr->elem, &order_by_priority_desc, NULL);
   curr->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -314,7 +318,16 @@ thread_yield (void)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread *t = thread_current();
+  int old_priority = t->priority;
+
+  if (t->stored_priority != -1)
+    t->stored_priority = new_priority;
+  else
+    t->priority = new_priority;
+  
+  if(t->priority < old_priority)
+    thread_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -440,6 +453,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  // Project #1
+  t->stored_priority = -1;
+  list_init(&t->donated_list);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -555,3 +571,10 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+// Project #1
+static bool order_by_priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct thread *t_a = list_entry(a, struct thread, elem);
+  struct thread *t_b = list_entry(b, struct thread, elem);
+  return t_a->priority > t_b->priority;
+}

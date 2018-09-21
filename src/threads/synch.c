@@ -29,8 +29,18 @@
 #include "threads/synch.h"
 #include <stdio.h>
 #include <string.h>
+#include <list.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
+
+static struct list donation_books;
+
+static bool order_by_priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+static bool order_by_priority_desc_for_condvar(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+static void donate(struct list *list, struct thread *holder, struct thread *cur, struct lock *lock);
+static bool order_by_priority_desc_for_donation(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -69,7 +79,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
+      list_insert_ordered(&sema->waiters, &thread_current ()->elem, &order_by_priority_desc, NULL);
       thread_block ();
     }
   sema->value--;
@@ -110,14 +120,19 @@ void
 sema_up (struct semaphore *sema) 
 {
   enum intr_level old_level;
+  struct thread *t = NULL;
 
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  if (!list_empty (&sema->waiters)) {
+    list_sort(&sema->waiters, &order_by_priority_desc, NULL);
+    t = list_entry (list_pop_front (&sema->waiters), struct thread, elem);
+    thread_unblock(t);
+  }
   sema->value++;
+  if (t && (t->priority > thread_current()->priority))
+    thread_yield();
   intr_set_level (old_level);
 }
 
@@ -180,6 +195,8 @@ lock_init (struct lock *lock)
 
   lock->holder = NULL;
   sema_init (&lock->semaphore, 1);
+  // Project #1
+  list_init(&donation_books);
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
@@ -197,8 +214,29 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  struct thread *t = thread_current();
+  if (lock->holder && lock->holder->priority < t->priority) {
+    if (lock->holder->stored_priority == -1)
+      lock->holder->stored_priority = lock->holder->priority;
+    lock->holder->priority = t->priority;
+
+    struct book b;
+    b.donatee = lock->holder;
+    b.donator = t;
+    b.lock = lock;
+    list_push_back(&donation_books, &b.elem);
+
+    donate(&donation_books, lock->holder, t, lock);
+
+    struct donation d;
+    d.lock = lock;
+    d.priority = t->priority;
+    list_push_back(&lock->holder->donated_list, &d.elem);
+  }
+
   sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+  lock->holder = t;
+  // lock->holder = thread_current ();
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -232,6 +270,23 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+
+  if (lock->holder->stored_priority != -1) {
+    struct list_elem *e;
+    struct list *list = &lock->holder->donated_list;
+    for (e = list_begin(list); e != list_end(list); e = list_next(e)) {
+      struct donation *d = list_entry(e, struct donation, elem);
+      if (d->lock == lock)
+        list_remove(e);
+    }
+    if (list_empty(list)) {
+      lock->holder->priority = lock->holder->stored_priority;
+      lock->holder->stored_priority = -1;
+    } else {
+      list_sort(list, &order_by_priority_desc_for_donation, NULL);
+      lock->holder->priority = list_entry(list_front(list), struct donation, elem)->priority;
+    }
+  }
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
@@ -318,9 +373,11 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
+  if (!list_empty (&cond->waiters)) {
+    list_sort(&cond->waiters, &order_by_priority_desc_for_condvar, NULL);
     sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -337,4 +394,45 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
+}
+
+// Project #1
+static bool order_by_priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct thread *t_a = list_entry(a, struct thread, elem);
+  struct thread *t_b = list_entry(b, struct thread, elem);
+  return t_a->priority > t_b->priority;
+}
+
+static bool order_by_priority_desc_for_condvar(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct semaphore_elem *sema_a = list_entry(a, struct semaphore_elem, elem);
+  struct semaphore_elem *sema_b = list_entry(b, struct semaphore_elem, elem);
+  return order_by_priority_desc(list_min(&sema_a->semaphore.waiters, &order_by_priority_desc, NULL), list_min(&sema_b->semaphore.waiters, &order_by_priority_desc, NULL), NULL);
+}
+
+static bool order_by_priority_desc_for_donation(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct donation *d_a = list_entry(a, struct donation, elem);
+  struct donation *d_b = list_entry(b, struct donation, elem);
+  return d_a->priority > d_b->priority;
+}
+
+static void donate(struct list *list, struct thread *holder, struct thread *cur, struct lock *lock) {
+  if (!list_empty(list)) {
+    struct list_elem *e;
+    for (e = list_begin(list); e != list_end(list); e = list_next(e)) {
+      struct book *b = list_entry(e, struct book, elem);
+      if (b->donator == holder) {
+        struct list *donated_list = &b->donatee->donated_list;
+        struct list_elem *l;
+        if (!list_empty(donated_list)) {
+          for (l = list_begin(donated_list); l != list_end(donated_list); l = list_next(l)) {
+            struct donation *d = list_entry(l, struct donation, elem);
+            if (b->lock == d->lock)
+              d->priority = cur->priority;
+          }
+        }
+        b->donatee->priority = cur->priority;
+        donate(list, b->donatee, cur, lock);
+      }
+    }
+  }
 }

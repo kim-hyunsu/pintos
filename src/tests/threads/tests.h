@@ -32,8 +32,6 @@ extern test_func test_mlfqs_fair_20;
 extern test_func test_mlfqs_nice_2;
 extern test_func test_mlfqs_nice_10;
 extern test_func test_mlfqs_block;
-// for project #0
-extern test_func hello;
 
 void msg (const char *, ...);
 void fail (const char *, ...);

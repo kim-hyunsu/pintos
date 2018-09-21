@@ -1,0 +1,30 @@
+Writing command line to /tmp/e1ohftWAHK.dsk...
+warning: can't find squish-pty, so terminal input will fail
+bochs -q
+Kernel command line: -q -mlfqs run mlfqs-block
+Pintos booting with 4,096 kB RAM...
+375 pages available in kernel pool.
+374 pages available in user pool.
+Calibrating timer...  204,600 loops/s.
+Boot complete.
+Executing 'mlfqs-block':
+(mlfqs-block) begin
+(mlfqs-block) Main thread acquiring lock.
+(mlfqs-block) Main thread creating block thread, sleeping 25 seconds...
+(mlfqs-block) Block thread spinning for 20 seconds...
+(mlfqs-block) Block thread acquiring lock...
+(mlfqs-block) ...got it.
+(mlfqs-block) Main thread spinning for 5 seconds...
+(mlfqs-block) Main thread releasing lock.
+Kernel PANIC at ../../threads/synch.c:241 in lock_release(): assertion `lock_held_by_current_thread (lock)' failed.
+Call stack: 0xc002fec8Interrupt 0x0e (#PF Page-Fault Exception) at eip=0xc01053b2
+ cr2=000000f1 error=00000000
+ eax=000000f1 ebx=000000f1 ecx=c002fdf4 edx=000003d4
+ esi=c010bb94 edi=c010ceca esp=c010d51b ebp=c002fe88
+ cs=0008 ds=0010 es=0010 ss=fec8
+Kernel PANIC recursion at ../../threads/interrupt.c:373 in intr_handler().
+Timer: 5067 ticks
+Thread: 0 idle ticks, 0 kernel ticks, 0 user ticks
+Console: 1094 characters output
+Keyboard: 0 keys pressed
+Powering off...
