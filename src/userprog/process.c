@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static size_t parse_args(char *command, int *esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -53,6 +54,9 @@ start_process (void *f_name)
   char *file_name = f_name;
   struct intr_frame if_;
   bool success;
+  // Project #2
+  int esp[100];
+  size_t total = parse_args(file_name, esp);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -65,6 +69,10 @@ start_process (void *f_name)
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
+
+  // Project #2
+  if_.esp = PHYS_BASE - total;
+  memcpy((char *)if_.esp, (char *)esp, total);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -462,4 +470,37 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+static size_t parse_args(char *command, int *esp) {
+  int argc = 0;
+  char *argv[100];
+  size_t str_len = 0;
+  char *filename;
+  char *token, *save_ptr;
+  int i;
+  int total;
+  char *ptr;
+  int vptr;
+
+  for (token = strtok_r(command, " ", &save_ptr); token != NULL;
+       token = strtok_r(NULL, " ", &save_ptr)) {
+         str_len = += strlen(token) + 1;
+         argv[argc] = token;
+         argc++;
+       }
+  filename = argv[0];
+  strlcpy(thread_current()->file_name, filename, strlen(filename) + 1);
+  total = 8 + (argc+2)*4 + (str_len%4 != 0) * (4-(str_len%4)) + str_len;
+  ptr = (char *)esp + total - str_len;
+  vptr = (int)PHYS_BASE - str_len;
+
+  esp[1] = argc;
+  esp[2] = (int)PHYS_BASE - total + 12;
+  for (i = 0; i < argc || argv[i] != NULL; i++) {
+    strlcpy(ptr, argv[i], strlen(argv[i]) + 1);
+    esp[i+3] = vptr;
+    ptr += strlen(argv[i]) + 1;
+    vptr += strlen(argv[i]) + 1;
+  }
 }
