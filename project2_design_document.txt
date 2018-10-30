@@ -1,0 +1,245 @@
+			+---------------------------+
+			|		CS 330				|
+			| PROJECT 2: USER PROGRAMS	|
+			| 	   DESIGN DOCUMENT     	|
+			+---------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Lee Nyoungwoo <leenw2@kaist.ac.kr>
+Kim Hyunsu <khszone02@kaist.ac.kr>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+We use 2 tokens!!
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+			   ARGUMENT PASSING
+			   ================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+A. In the "thread.h" file
+a.1. We add the file_name[16], struct list f_list, struct lock flist_lock, struct file *exe_file 
+in the thread structure. They used by controlling the file synchronization and execution file 
+in each thread.
+a.2. We add the struct 'fd'. That struct contains int fd, const char *file_name, struct file *file_p,
+sturct list_elem elem, bool deny_write. They used by controlling the file descriptor.
+
+B. In the "syscall.h" file
+b.1. We add defining CODE_BASE(0x84800) for controlling the valid address.
+b.2. We add the struct 'pair' for controlling a pair of threads(child-parent). That struct contains
+struct thread *parent, tid_t child_tid, bool success, bool is_exit, int e_status and kinds of semaphores.
+They used by thread synchronization such as process_wait and exit function. 
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe how you implemented argument parsing.  How do
+>> you arrange for the elements of argv[] to be in the right order?
+
+처음 들어온 string을 strtok_r로 자른 다음, 이를 argp에 저장하고
+먼저 argv[0]에 argp를 전부 넣어준다. 그 뒤에 argp를 strtok_r로 자르고 이번에는
+argp가 Null이 될 때까지 argv에 자른 값을 앞에서부터 하나씩 넣어준다.  
+
+>> How do you avoid overflowing the stack page?
+
+실제로 overflow가 일어나는 경우, 프로세스를 종료하는 것이 합리적이기 때문에,
+너무 많은 arguments가 들어와서 overflow가 일어나면, 프로세스를 종료하고 실행 파일을 해제한다.
+
+---- RATIONALE ----
+
+>> A3: Why does Pintos implement strtok_r() but not strtok()?
+strtok_r()과 strtok()의 차이점은, strtok_r()가 save_ptr(자리를 표시하는 포인터)를 제공한다는 것이다.
+핀토스에서는 커널이 command를 command line(executable name)과 argument로 분리한다.
+따라서 우리는 argument가 도달하는 지점의 주소를 넣어야 하므로 strtok_r()을 사용해야 한다.
+
+>> A4: In Pintos, the kernel separates commands into a executable name
+>> and arguments.  In Unix-like systems, the shell does this
+>> separation.  Identify at least two advantages of the Unix approach.
+
+명령을 실행 가능한 이름과 argument로 구분할 수 있다면, 실행 파일이 커널에 전달되기 전에
+미리 확인할 수 있고 argument가 예상 범위를 벗어나는지 확인할 수 있어서 강력한(Robust) 검사가 가능하다.
+
+			     SYSTEM CALLS
+			     ============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+(A1 문항과 동일)
+
+A. In the "thread.h" file
+a.1. We add the file_name[16], struct list f_list, struct lock flist_lock, struct file *exe_file 
+in the thread structure. They used by controlling the file synchronization and execution file 
+in each thread.
+a.2. We add the struct 'fd'. That struct contains int fd, const char *file_name, struct file *file_p,
+sturct list_elem elem, bool deny_write. They used by controlling the file descriptor.
+
+B. In the "syscall.h" file
+b.1. We add defining CODE_BASE(0x84800) for controlling the valid address.
+b.2. We add the struct 'pair' for controlling a pair of threads(child-parent). That struct contains
+struct thread *parent, tid_t child_tid, bool success, bool is_exit, int e_status and kinds of semaphores.
+They used by thread synchronization such as process_wait and exit function. 
+
+>> B2: Describe how file descriptors are associated with open files.
+>> Are file descriptors unique within the entire OS or just within a
+>> single process?
+
+실제 구현에서 file descriptor는 각 파일에 대해 1:1 mapping을 유지한다. 
+따라서 fd는 전체 OS 내에서 고유한 값을 가진다.
+
+---- ALGORITHMS ----
+
+>> B3: Describe your code for reading and writing user data from the
+>> kernel.
+
+Reading : 
+1. buffer, buffer + size가 유효한 포인터인지 확인하고 그렇지 않으면 exit(-1)
+2. fd가 유효하지않거나 1이면 -1을 반환해서 예외처리
+3. fd가 STDIN이면 표준 입력에서 키를 검색하여 잠금을 해재하고 이를 반환
+4. 나머지 경우에는 f_list에서 fd번호에 따라 열린 파일을 찾고 file_read를 사용하여
+파일을 읽고 읽은 byte를 반환
+5. file_read는 file_lock을 통해 동기화 관리
+
+Writing:
+1. buffer, buffer + size가 유효한 포인터인지 확인하고 그렇지 않으면 exit(-1)
+2. fd가 유효하지않거나 0이면 -1을 반환해서 예외처리
+3. fd가 STDOUT이면 putbuf를 사용하여 버퍼 내용을 콘솔에 인쇄
+4. 나머지 경우에는 f_list에서 fd번호에 따라 열린 파일을 찾고 file_write를 사용하여
+버퍼를 파일에 쓰고 가져옴
+5. file_wrtie는 file_lock을 통해 동기화 관리
+
+>> B4: Suppose a system call causes a full page (4,096 bytes) of data
+>> to be copied from user space into the kernel.  What is the least
+>> and the greatest possible number of inspections of the page table
+>> (e.g. calls to pagedir_get_page()) that might result?  What about
+>> for a system call that only copies 2 bytes of data?  Is there room
+>> for improvement in these numbers, and how much?
+
+A.
+a.1. 가장 최소 검사 수는 1이다. pagedir_get_page를 통해 진행한 첫 번째 검사가
+주소에서 알 수 있는 페이지를 얻으면 검사가 필요하지 않다.
+a.2. 인접한 페이지가 아니라면 최대 검사 수는 4096이다. 유효한 access를 보장하기
+위해서 모든 주소를 확인해야 한다. (만약 페이지가 인접해있다면 최대 검사 수는 2)
+
+B. 2바이트의 데이터만 복사하는 system call
+b.1. 최소 검사 수는 마찬가지로 1번이다.
+b.2. 최대 검사 수는 2이다. 인접하지 않을 경우 다른 바이트가 있는 곳을 검사해야 한다.
+
+C. 개선할 여지가 많은 것 같음.
+
+
+>> B5: Briefly describe your implementation of the "wait" system call
+>> and how it interacts with process termination.
+
+A. is_exit이라는 종료 상태를 만들어서, 자식의 종료 상태를 나타낸다.
+B. 부모가 자식을 생성하면, pair라는 struct를 통해 부모-자식 관계를 저장하고, 이는
+pair_list로 관리된다.
+C. 만약 종료되는 프로세스가 자식을 가지고 있다면, process_wait()에서 sema_down을 통해
+자식 프로세스들이 종료되길 기다림.
+D. 자식들이 종료되고 종료 상태를 반환하면, sema_up을 통해 부모도 종료될 수 있도록 함.
+
+>> B6: Any access to user program memory at a user-specified address
+>> can fail due to a bad pointer value.  Such accesses must cause the
+>> process to be terminated.  System calls are fraught with such
+>> accesses, e.g. a "write" system call requires reading the system
+>> call number from the user stack, then each of the call's three
+>> arguments, then an arbitrary amount of user memory, and any of
+>> these can fail at any point.  This poses a design and
+>> error-handling problem: how do you best avoid obscuring the primary
+>> function of code in a morass of error-handling?  Furthermore, when
+>> an error is detected, how do you ensure that all temporarily
+>> allocated resources (locks, buffers, etc.) are freed?  In a few
+>> paragraphs, describe the strategy or strategies you adopted for
+>> managing these issues.  Give an example.
+
+유효하지 않은 메모리 접근을 피하기 위한 유효성 검사를 하기 전에, check_address()에서
+주소가 NULL인지를 확인한다. 그 뒤에 유효한 사용자 주소인지 확인하고, pagedir_get_page()를 이용하여
+페이지 directory에 제대로 mapping되었는지 확인한다.
+
+예를 들어서, "Read" system call에서 esp[2]를 가리키는 포인터의 주소를 검사하고,
+다음에 주어지는 포인터가 buffer와 size를 제대로 가리키는 주소인지를 검사합니다.
+도중에 유효하지 않은 메모리 접근을 하면, 프로세스가 종료됩니다.
+
+ 
+---- SYNCHRONIZATION ----
+
+>> B7: The "exec" system call returns -1 if loading the new executable
+>> fails, so it cannot return before the new executable has completed
+>> loading.  How does your code ensure this?  How is the load
+>> success/failure status passed back to the thread that calls "exec"?
+
+우리는 check_loading()이라는 함수를 process.c에 구현함으로써
+자신의 load 상태를 pair struct에 저장합니다. 자식은 load에 실패할 경우, pair struct에
+이를 기록하고, 추후에 check_loading()에서는 부모와 자식 관계일 경우 success를 확인해서 
+loading sema를 sema up 해주게됩니다.
+
+>> B8: Consider parent process P with child process C.  How do you
+>> ensure proper synchronization and avoid race conditions when P
+>> calls wait(C) before C exits?  After C exits?  How do you ensure
+>> that all resources are freed in each case?  How about when P
+>> terminates without waiting, before C exits?  After C exits?  Are
+>> there any special cases?
+
+우리의 구현에 따르면
+1. C를 호출하면, 이는 C가 종료되지 전에 대기하고, P는 자식이 종료될 때까지 기다린다.
+2. 자식이 종료되고 종료 상태를 반환하면, P는 이를 확인한다.
+3. P는 C가 종료되기 전에 기다리지 않고 종료하며, P 내부에서 선언된 데이터는 모두 해제된다.
+
+---- RATIONALE ----
+
+>> B9: Why did you choose to implement access to user memory from the
+>> kernel in the way that you did?
+
+document에 적혀진 접근 방법 중, 해결하기 쉽다고 생각한 접근법을 따랐다.
+
+>> B10: What advantages or disadvantages can you see to your design
+>> for file descriptors?
+
+A. 장점 = 커널이 열려있는 파일을 알 수 있으므로 이들을 보다 유연하게 관리할 수 있다.
+B. 단점 = fd가 커널의 공간을 차지하므로, 많은 파일을 열게되면 커널을 방해할 수 있다.
+
+
+>> B11: The default tid_t to pid_t mapping is the identity mapping.
+>> If you changed it, what advantages are there to your approach?
+
+우리는 tid_t 혹은 pid_t를 바꾸지 않고 그래도 사용했다. 바꿀 필요성을 느끼지 못했다.
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+
+>> Any other comments?
