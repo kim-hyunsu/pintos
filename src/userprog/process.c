@@ -19,6 +19,8 @@
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
 #include "threads/malloc.h"
+#include "vm/page.h"
+#include "vm/frame.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -275,6 +277,14 @@ process_exit (void)
     }
   }
 
+  struct list *page_table = &curr->page_table;
+  struct page_entry *pe;
+  while(!list_empty(page_table)) {
+    e = list_pop_front(page_table);
+    pe = list_entry(e, struct page_entry, elem);
+    free(pe);
+  }
+
   if(curr->exe_file){
     file_allow_write(curr->exe_file);
     file_close(curr->exe_file);
@@ -408,6 +418,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
+      file_close(file);
       goto done; 
     }
 
@@ -493,7 +504,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   // Project #2
   file_deny_write(file);
   thread_current()->exe_file = file;
-
   success = true;
 
  done:
@@ -584,8 +594,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       /* Get a page of memory. */
       uint8_t *kpage = palloc_get_page (PAL_USER);
-      if (kpage == NULL)
-        return false;
+      if (kpage == NULL) {
+        kpage = swap_out(PAL_USER);
+      }
 
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
@@ -595,13 +606,15 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
+      upage = pg_round_down(upage);
       /* Add the page to the process's address space. */
       if (!install_page (upage, kpage, writable)) 
         {
           palloc_free_page (kpage);
-          return false; 
+          return false;
         }
-
+      push_page_table(upage, PHYS);
+      push_frame_table(upage, kpage, thread_current());
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
@@ -617,16 +630,27 @@ setup_stack (void **esp)
 {
   uint8_t *kpage;
   bool success = false;
+  // void *upage = pg_round_down(((uint8_t *) PHYS_BASE) - PGSIZE);
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
+  // if (kpage == NULL)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
+      // kpage = swap_out(PAL_USER | PAL_ZERO);
     }
+  // success = install_page(upage, kpage, true);
+  // if (success) {
+  //   *esp = PHYS_BASE;
+  //   push_page_table(upage, PHYS);
+  //   push_frame_table(upage, kpage, thread_current());
+  // } else {
+  //   palloc_free_page(kpage);
+  // }
   return success;
 }
 

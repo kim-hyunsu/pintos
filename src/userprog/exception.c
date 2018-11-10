@@ -166,22 +166,30 @@ page_fault (struct intr_frame *f)
   //   return;
   // }
 
-  if (!not_present || !fault_addr || !is_user_vaddr(fault_addr))
+  if (!not_present || !fault_addr || !is_user_vaddr(fault_addr)) {
+    // printf("not_present(%s)\n", not_present?"true":"false");
+    // printf("fault_addr(%p)\n", fault_addr);
+    // printf("is_user_vaddr(fault_addr)(%s)\n", is_user_vaddr(fault_addr)?"true":"false");
     goto error;
+  }
 
   struct thread *cur = thread_current();
   void *stack = user ? f->esp : cur->temp_stack; 
   struct page_entry *pe = lookup_page(fault_addr);
 
   if (!pe) {
-    if (fault_addr >= stack - 32 && PHYS_BASE - pg_round_down (fault_addr) <= (8 * (1 << 20))) {
-      if (!stack_growth(fault_addr, true, write))
+    if (fault_addr >= (stack - 32) && (PHYS_BASE - pg_round_down (fault_addr)) <= (8 * (1 << 20))) {
+      if (!stack_growth(fault_addr, true, write)) {
+        // printf("stack growth fail\n");
         goto error;
+      }
       else
         return;
     }
-    if (!pagedir_get_page(cur->pagedir, fault_addr))
+    if (!pagedir_get_page(cur->pagedir, fault_addr)) {
+      // printf("pagedir_get_page fail\n");
       goto error;
+    }
     else {
       printf ("Page fault at %p: %s error %s page in %s context.\n",
       fault_addr,
@@ -193,12 +201,13 @@ page_fault (struct intr_frame *f)
     }
   }
   if (pe->location == DISK) {
-    if (!allocate_page(fault_addr, user, pe->writable))
+    if (!allocate_page(fault_addr, user, pe->writable)) {
+      // printf("alloc fail\n");
       goto error;
+    }
     else
       return;
   }
-
 
   error:
     syscall_exit(-1);

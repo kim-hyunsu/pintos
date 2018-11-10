@@ -9,8 +9,6 @@
 #include "userprog/pagedir.h"
 
 static bool install_page (void *upage, void *frame, bool writable);
-static void push_page_table(void *upage, enum location);
-static void *swap_out(enum palloc_flags);
 static void swap_in(void *upage, void *frame);
 
 struct page_entry *lookup_page(uint32_t *vaddr) {
@@ -70,7 +68,7 @@ static bool install_page (void *upage, void *frame, bool writable) {
           && pagedir_set_page (t->pagedir, upage, frame, writable));
 }
 
-static void push_page_table(void *upage, enum location location) {
+void push_page_table(void *upage, enum location location) {
   struct thread *t = thread_current();
   struct page_entry *pe = lookup_page(upage);
   if (pe) {
@@ -83,9 +81,11 @@ static void push_page_table(void *upage, enum location location) {
   list_push_back(&t->page_table, &pe->elem);
 }
 
-static void *swap_out(enum palloc_flags flags) {
+void *swap_out(enum palloc_flags flags) {
   struct thread *t = thread_current();
   struct frame_entry *fe = pop_frame_table();
+  struct page_entry *pe = lookup_page(fe->upage);
+  pe->location = DISK;
   int index = push_swap_table(fe->upage, fe->frame, t);
   write_block(fe->frame, index);
   

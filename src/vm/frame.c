@@ -1,6 +1,7 @@
 #include <list.h>
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 #include "vm/frame.h"
 
 static struct list frame_table;

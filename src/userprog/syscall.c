@@ -28,7 +28,6 @@ static bool check_address(void *add){
 	bool success = 1;
 	struct thread *cur = thread_current();
 	int i;
-
 	if(!(add))
 		return 0;
   if(add > PHYS_BASE - 12)
@@ -337,7 +336,6 @@ int syscall_exit(int status){
 
 	if(!is_child) status = -1;
 	else sema_up(&pair->sema);
-
   printf("%s: exit(%d)\n", file_name, status);
   thread_exit();
 }
