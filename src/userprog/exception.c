@@ -6,6 +6,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
+#include "userprog/pagedir.h"
+#include "vm/page.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -165,14 +167,14 @@ page_fault (struct intr_frame *f)
   // }
 
   if (!not_present || !fault_addr || !is_user_vaddr(fault_addr))
-    return syscall_exit(-1);
+    goto error;
 
+  struct thread *cur = thread_current();
   void *stack = user ? f->esp : cur->temp_stack; 
   struct page_entry *pe = lookup_page(fault_addr);
-  struct thread *cur = thread_current();
 
   if (!pe) {
-    if (fault_addr >= stack_ptr - 32 && PHYS_BASE - pg_round_down (fault_addr) <= (8 * (1 << 20))) {
+    if (fault_addr >= stack - 32 && PHYS_BASE - pg_round_down (fault_addr) <= (8 * (1 << 20))) {
       if (!stack_growth(fault_addr, true, write))
         goto error;
       else

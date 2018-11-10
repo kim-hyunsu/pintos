@@ -10,4 +10,4 @@ struct frame_entry {
 
 void frame_init(void);
 void push_frame_table(void *upage, void* frame, struct thread *t);
-struct frame_entry pop_frame_table(void);
+struct frame_entry *pop_frame_table(void);

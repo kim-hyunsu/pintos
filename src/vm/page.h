@@ -1,8 +1,8 @@
 #include <list.h>
 
-enum {
-  PHYS
-  DISK
+enum location {
+  PHYS,
+  DISK,
   FILE
 };
 
@@ -13,5 +13,6 @@ struct page_entry {
   struct list_elem elem;
 };
 
-struct page_entry lookup_page(uint32_t *vaddr);
+struct page_entry *lookup_page(uint32_t *vaddr);
 bool stack_growth(void *vaddr, bool user, bool writable);
+bool allocate_page(void *vaddr, bool user, bool writable);

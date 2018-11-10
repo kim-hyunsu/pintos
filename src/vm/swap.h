@@ -7,10 +7,10 @@ struct swap_entry {
   struct thread *t;
   int index;
   struct list_elem elem;
-}
+};
 
 void swap_init(void);
 void read_block(void *frame, int index);
 void write_block(void *frame, int index);
-void push_swap_table(void *upage, void *frame, struct thread *t, int index);
-struct frame_entry remove_swap(void *upage);
+int push_swap_table(void *upage, void *frame, struct thread *t);
+struct swap_entry *remove_swap(void *upage);

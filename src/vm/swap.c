@@ -1,8 +1,10 @@
 #include <list.h>
+#include "devices/disk.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 #include "vm/swap.h"
 
-static struct block *swap_block;
+static struct disk *swap_block;
 static struct lock swap_block_lock;
 static struct list swap_table;
 static struct lock swap_table_lock;
@@ -10,7 +12,7 @@ static bool order_by_index(const struct list_elem *a, const struct list_elem *b,
 
 void swap_init(void) {
   lock_init(&swap_block_lock);
-  swap_block = block_get_role(BLOCK_SWAP);
+  swap_block = disk_get(1, 1);
   lock_init(&swap_table_lock);
   list_init(&swap_table);
 }
@@ -19,7 +21,7 @@ void read_block(void *frame, int index) {
   int i;
   lock_acquire(&swap_block_lock);
   for (i = 0; i < 8; i++) {
-    block_read(swap_block, index + i, (void *)frame + (i * BLOCK_SECTOR_SIZE));
+    disk_read(swap_block, index + i, (void *)frame + (i * DISK_SECTOR_SIZE));
   }
   lock_release(&swap_block_lock);
 }
@@ -28,12 +30,12 @@ void write_block(void *frame, int index) {
   int i;
   lock_acquire(&swap_block_lock);
   for (i = 0; i < 8; i++) {
-    block_write(swap_block, index + i, (void *)frame + (i * BLOCK_SECTOR_SIZE));
+    disk_write(swap_block, index + i, (void *)frame + (i * DISK_SECTOR_SIZE));
   }
   lock_release(&swap_block_lock);
 }
 
-void push_swap_table(void *upage, void *frame, struct thread *t, int index) {
+int push_swap_table(void *upage, void *frame, struct thread *t) {
 	int index = 0;
 	struct list_elem *e;
 	struct swap_entry *temp;
@@ -55,9 +57,10 @@ void push_swap_table(void *upage, void *frame, struct thread *t, int index) {
   se->index = index;
   list_push_back(&swap_table, &se->elem);
   lock_release(&swap_table_lock);
+  return index;
 }
 
-struct frame_entry remove_swap(void *upage) {
+struct swap_entry *remove_swap(void *upage) {
   struct list_elem *e;
   struct swap_entry *se;
   struct swap_entry *found = NULL;
@@ -66,6 +69,7 @@ struct frame_entry remove_swap(void *upage) {
     se = list_entry(e, struct swap_entry, elem);
     if (se->upage == upage) {
       found = se;
+      list_remove(&se->elem);
       break;
     }
   }

@@ -21,7 +21,7 @@ void push_frame_table(void *upage, void* frame, struct thread *t) {
   lock_release(&frame_table_lock);  
 }
 
-struct frame_entry pop_frame_table(void) {
+struct frame_entry *pop_frame_table(void) {
   struct frame_entry *fe = NULL;
   lock_acquire(&frame_table_lock);
   fe = list_entry(list_pop_front(&frame_table), struct frame_entry, elem);

@@ -1,13 +1,19 @@
 #include <list.h>
 #include "threads/thread.h"
 #include "vm/page.h"
+#include "vm/swap.h"
+#include "vm/frame.h"
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "threads/malloc.h"
+#include "userprog/pagedir.h"
 
 static bool install_page (void *upage, void *frame, bool writable);
 static void push_page_table(void *upage, enum location);
-static void *swap_out(enum palloc_flags flags);
-static void swap_in(void *upage, frame);
+static void *swap_out(enum palloc_flags);
+static void swap_in(void *upage, void *frame);
 
-struct page_entry lookup_page(uint32_t *vaddr) {
+struct page_entry *lookup_page(uint32_t *vaddr) {
   void *upage = pg_round_down(vaddr);
   struct thread *t = thread_current();
   struct list_elem *e;
@@ -25,7 +31,8 @@ struct page_entry lookup_page(uint32_t *vaddr) {
 
 bool stack_growth(void *vaddr, bool user, bool writable) {
   void *upage = pg_round_down(vaddr);
-  void *frame = palloc_get_page(user ? PAL_USER|PAL_ZERO : PAL_ZERO);
+  enum palloc_flags flag = user ? PAL_USER|PAL_ZERO : PAL_ZERO;
+  void *frame = palloc_get_page(flag);
   if (!frame) {
     // printf("Not enough physical memory for stack growth.\n");
     // palloc_free_page(frame);
@@ -47,7 +54,7 @@ bool allocate_page(void *vaddr, bool user, bool writable) {
   void *frame = palloc_get_page(flag);
   if (!frame)
     frame = swap_out(flag);
-  swap_in(upage, frame)
+  swap_in(upage, frame);
   if (!install_page(upage, frame, writable)) {
     palloc_free_page(frame);
     return 0;
@@ -63,7 +70,7 @@ static bool install_page (void *upage, void *frame, bool writable) {
           && pagedir_set_page (t->pagedir, upage, frame, writable));
 }
 
-static void push_page_table(void *upage, enum location) {
+static void push_page_table(void *upage, enum location location) {
   struct thread *t = thread_current();
   struct page_entry *pe = lookup_page(upage);
   if (pe) {
@@ -77,9 +84,20 @@ static void push_page_table(void *upage, enum location) {
 }
 
 static void *swap_out(enum palloc_flags flags) {
-
+  struct thread *t = thread_current();
+  struct frame_entry *fe = pop_frame_table();
+  int index = push_swap_table(fe->upage, fe->frame, t);
+  write_block(fe->frame, index);
+  
+  pagedir_clear_page(t->pagedir, fe->upage);
+  palloc_free_page(fe->frame);
+  free(fe);
+  return palloc_get_page(flags);
 }
 
-static void swap_in(void *upage, frame) {
-
+static void swap_in(void *upage, void *frame) {
+  struct swap_entry *se = remove_swap(upage);
+  read_block(frame, se->index);
+  push_frame_table(upage, frame, thread_current());
+  free(se);
 }
