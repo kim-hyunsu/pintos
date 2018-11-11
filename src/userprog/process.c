@@ -284,6 +284,13 @@ process_exit (void)
     pe = list_entry(e, struct page_entry, elem);
     free(pe);
   }
+  // struct list *page_table = &curr->sup_page_table;
+  // struct page_entry *pe;
+  // while(!list_empty(page_table)) {
+  //   e = list_pop_front(page_table);
+  //   pe = list_entry(e, struct page_entry, elem);
+  //   free(pe);
+  // }
 
   if(curr->exe_file){
     file_allow_write(curr->exe_file);
@@ -582,7 +589,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -592,33 +598,35 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
-      if (kpage == NULL) {
-        kpage = swap_out(PAL_USER);
-      }
+      lazy_push_page_table(upage, file, ofs, page_zero_bytes, writable);
 
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+      // /* Get a page of memory. */
+      // uint8_t *kpage = palloc_get_page (PAL_USER);
+      // if (kpage == NULL) {
+      //   kpage = swap_out(PAL_USER);
+      // }
 
-      upage = pg_round_down(upage);
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-        {
-          palloc_free_page (kpage);
-          return false;
-        }
-      push_page_table(upage, PHYS);
-      push_frame_table(upage, kpage, thread_current());
+      // /* Load this page. */
+      // if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+      //   {
+      //     palloc_free_page (kpage);
+      //     return false; 
+      //   }
+      // memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+      // /* Add the page to the process's address space. */
+      // if (!install_page (upage, kpage, writable)) 
+      //   {
+      //     palloc_free_page (kpage);
+      //     return false;
+      //   }
+      // push_page_table(upage, PHYS);
+      // push_frame_table(upage, kpage, thread_current());
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      ofs += page_read_bytes;
     }
   return true;
 }
@@ -630,27 +638,17 @@ setup_stack (void **esp)
 {
   uint8_t *kpage;
   bool success = false;
-  // void *upage = pg_round_down(((uint8_t *) PHYS_BASE) - PGSIZE);
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
-  // if (kpage == NULL)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
+      if (success) {
         *esp = PHYS_BASE;
+      }
       else
         palloc_free_page (kpage);
-      // kpage = swap_out(PAL_USER | PAL_ZERO);
     }
-  // success = install_page(upage, kpage, true);
-  // if (success) {
-  //   *esp = PHYS_BASE;
-  //   push_page_table(upage, PHYS);
-  //   push_frame_table(upage, kpage, thread_current());
-  // } else {
-  //   palloc_free_page(kpage);
-  // }
   return success;
 }
 

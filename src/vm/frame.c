@@ -29,4 +29,3 @@ struct frame_entry *pop_frame_table(void) {
   lock_release(&frame_table_lock);
   return fe;
 }
-

@@ -39,14 +39,19 @@ static bool check_address(void *add){
 		void *page = (void *)pagedir_get_page(cur->pagedir, add+i);
 		if (add+i > PHYS_BASE-12)
 			success = 0;
-		if (!page)
+		if (!page) {
 			success = 0;
+		}
 		if(add+i < (void *)CODE_BASE)
 			success = 0;
 		if(!(add+i))
 			success = 0;
 	}
 	return success;
+}
+
+static bool check_right_uvaddr(void * add){
+  return (add != NULL && is_user_vaddr (add));
 }
 
 static bool check_filep(const char *file){
@@ -70,6 +75,7 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+	thread_current()->temp_stack = f->esp;
 	if(!check_address(f->esp)){
 		syscall_exit(-1);
 		return;
@@ -133,7 +139,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 			lock_acquire(&file_lock);
 			bool success = filesys_create(file, init_size);
 			lock_release(&file_lock);
-
+			f->eax = 0;
 			f->eax = success;
 			break;
 		}
@@ -154,7 +160,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 			lock_acquire(&file_lock);
 			bool success = filesys_remove(file);
 			lock_release(&file_lock);
-
+			f->eax = 0;
 			f->eax = success;
 			break;
 		}
@@ -203,7 +209,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_READ:
 		{
 			int fd = ((int *)f->esp)[1];
-			if(!check_address((void *)(((int *)f->esp)[2]))){
+			if(!check_right_uvaddr((void *)(((int *)f->esp)[2]))){
 				syscall_exit(-1);
 				break;
 			}
@@ -222,7 +228,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_WRITE:
 		{
 			int fd = ((int *)f->esp)[1];
-			if(!check_address((void *)(((int *)f->esp)[2]))){
+			if(!check_right_uvaddr((void *)(((int *)f->esp)[2]))){
 				syscall_exit(-1);
 				break;
 			}
@@ -251,6 +257,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 					break;
 				}
 			}
+			break;
 		}
 
 		case SYS_TELL:
@@ -343,12 +350,15 @@ int syscall_exit(int status){
 int syscall_open(const char *file){
 	struct thread *cur = thread_current();
 	struct list_elem *e;
+	lock_acquire(&cur->flist_lock);
 	struct file *file_p = filesys_open(file);
 	int i = 0;
 
-	if(file_p == NULL) return -1;
+	if(file_p == NULL) {
+		lock_release(&cur->flist_lock);
+		return -1;
+	}
 
-	lock_acquire(&cur->flist_lock);
 	if(list_empty(&cur->f_list)){
 		struct fd *std_in = (struct fd *)malloc(sizeof(struct fd));
 		struct fd *std_out = (struct fd *)malloc(sizeof(struct fd));
@@ -402,7 +412,8 @@ int syscall_read(int fd, void *b, unsigned size){
 		unsigned i = 0;
 
 		while((nk = input_getc()) != 13){
-			if(size <= i) break;
+			if(i >= size)
+				break;
 			*nb = nk;
 			nb ++;
 			i ++;

@@ -4,35 +4,35 @@
 #include "threads/malloc.h"
 #include "vm/swap.h"
 
-static struct disk *swap_block;
-static struct lock swap_block_lock;
+static struct disk *swap_disk;
+static struct lock swap_disk_lock;
 static struct list swap_table;
 static struct lock swap_table_lock;
 static bool order_by_index(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 void swap_init(void) {
-  lock_init(&swap_block_lock);
-  swap_block = disk_get(1, 1);
+  lock_init(&swap_disk_lock);
+  swap_disk = disk_get(1, 1);
   lock_init(&swap_table_lock);
   list_init(&swap_table);
 }
 
-void read_block(void *frame, int index) {
+void read_disk(void *frame, int index) {
   int i;
-  lock_acquire(&swap_block_lock);
+  lock_acquire(&swap_disk_lock);
   for (i = 0; i < 8; i++) {
-    disk_read(swap_block, index + i, (void *)frame + (i * DISK_SECTOR_SIZE));
+    disk_read(swap_disk, index + i, (void *)frame + (i * DISK_SECTOR_SIZE));
   }
-  lock_release(&swap_block_lock);
+  lock_release(&swap_disk_lock);
 }
 
-void write_block(void *frame, int index) {
+void write_disk(void *frame, int index) {
   int i;
-  lock_acquire(&swap_block_lock);
+  lock_acquire(&swap_disk_lock);
   for (i = 0; i < 8; i++) {
-    disk_write(swap_block, index + i, (void *)frame + (i * DISK_SECTOR_SIZE));
+    disk_write(swap_disk, index + i, (void *)frame + (i * DISK_SECTOR_SIZE));
   }
-  lock_release(&swap_block_lock);
+  lock_release(&swap_disk_lock);
 }
 
 int push_swap_table(void *upage, void *frame, struct thread *t) {
@@ -60,21 +60,22 @@ int push_swap_table(void *upage, void *frame, struct thread *t) {
   return index;
 }
 
-struct swap_entry *remove_swap(void *upage) {
+int remove_swap(void *upage) {
   struct list_elem *e;
   struct swap_entry *se;
-  struct swap_entry *found = NULL;
+  int index = 0;
   lock_acquire(&swap_table_lock);
   for (e = list_begin(&swap_table); e != list_end(&swap_table); e = list_next(e)) {
     se = list_entry(e, struct swap_entry, elem);
     if (se->upage == upage) {
-      found = se;
       list_remove(&se->elem);
+      index = se->index;
+      free(se);
       break;
     }
   }
   lock_release(&swap_table_lock);
-  return found;
+  return index;
 }
 
 static bool order_by_index(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {

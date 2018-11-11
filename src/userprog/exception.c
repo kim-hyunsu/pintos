@@ -130,6 +130,7 @@ page_fault (struct intr_frame *f)
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
+  struct thread *cur = thread_current();
 
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
@@ -152,44 +153,21 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* For project #2 */
-  // if((int)fault_addr <= 4 || (int)fault_addr >= (int)PHYS_BASE){
-  //   struct thread *cur = thread_current();
-  //   struct pair *pair = lookup_child(cur->tid);
-  //   if(pair){
-  //     pair->is_exit = 1;
-  //     pair->e_status = -1;
-  //     sema_up(&pair->sema);
-  //   }
-  //   printf("%s: exit(%d)\n", cur->file_name, -1);
-  //   thread_exit();
-  //   return;
-  // }
-
-  if (!not_present || !fault_addr || !is_user_vaddr(fault_addr)) {
-    // printf("not_present(%s)\n", not_present?"true":"false");
-    // printf("fault_addr(%p)\n", fault_addr);
-    // printf("is_user_vaddr(fault_addr)(%s)\n", is_user_vaddr(fault_addr)?"true":"false");
+  if (!not_present || fault_addr == NULL || !is_user_vaddr(fault_addr))
     goto error;
-  }
 
-  struct thread *cur = thread_current();
   void *stack = user ? f->esp : cur->temp_stack; 
   struct page_entry *pe = lookup_page(fault_addr);
 
-  if (!pe) {
-    if (fault_addr >= (stack - 32) && (PHYS_BASE - pg_round_down (fault_addr)) <= (8 * (1 << 20))) {
-      if (!stack_growth(fault_addr, true, write)) {
-        // printf("stack growth fail\n");
+  if (pe == NULL) {
+    if (fault_addr >= (stack - 32) && (PHYS_BASE - pg_round_down(fault_addr)) <= (8 * (1 << 20))) {
+      if (!stack_growth(fault_addr, true, write))
         goto error;
-      }
       else
         return;
     }
-    if (!pagedir_get_page(cur->pagedir, fault_addr)) {
-      // printf("pagedir_get_page fail\n");
+    if (!pagedir_get_page(cur->pagedir, fault_addr))
       goto error;
-    }
     else {
       printf ("Page fault at %p: %s error %s page in %s context.\n",
       fault_addr,
@@ -201,15 +179,20 @@ page_fault (struct intr_frame *f)
     }
   }
   if (pe->location == DISK) {
-    if (!allocate_page(fault_addr, user, pe->writable)) {
-      // printf("alloc fail\n");
+    if (!allocate_page(fault_addr, user, pe->writable))
       goto error;
-    }
     else
       return;
   }
+  if (pe->is_lazy) {
+    if (!lazy_loading(fault_addr, user, pe->writable, pe->file, pe->offset, pe->page_zero_bytes))
+      goto error;
+    else 
+      return;
+  }
+
+  NOT_REACHED();
 
   error:
     syscall_exit(-1);
 }
-
