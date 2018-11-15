@@ -166,7 +166,7 @@ page_fault (struct intr_frame *f)
       else
         return;
     }
-    if (!pagedir_get_page(cur->pagedir, fault_addr))
+    if (!pagedir_get_page(cur->pagedir, fault_addr)) 
       goto error;
     else {
       printf ("Page fault at %p: %s error %s page in %s context.\n",
@@ -184,7 +184,7 @@ page_fault (struct intr_frame *f)
     else
       return;
   }
-  if (pe->is_lazy) {
+  if (pe->location == FILE) {
     if (!lazy_loading(fault_addr, user, pe->writable, pe->file, pe->offset, pe->page_zero_bytes))
       goto error;
     else 

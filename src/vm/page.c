@@ -14,6 +14,7 @@
 
 static bool install_page (void *upage, void *frame, bool writable);
 static void swap_in(void *upage, void *frame);
+static void *swap_out(enum palloc_flags);
 static void change_location(void *upage, enum location);
 
 struct page_entry *lookup_page(uint32_t *vaddr) {
@@ -119,7 +120,7 @@ void lazy_push_page_table(void *upage, struct file *file, off_t offset, size_t p
   list_push_back(&t->page_table, &pe->elem);
 }
 
-void *swap_out(enum palloc_flags flags) {
+static void *swap_out(enum palloc_flags flags) {
   struct thread *t = thread_current();
   struct frame_entry *fe = pop_frame_table();
   struct page_entry *pe = lookup_page(fe->upage);

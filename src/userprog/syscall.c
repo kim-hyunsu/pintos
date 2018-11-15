@@ -1,6 +1,7 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include "lib/user/syscall.h"
 #include "threads/interrupt.h"
 #include "threads/init.h"
 #include "threads/thread.h"
@@ -14,6 +15,8 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include "vm/mmap.h"
+#include "vm/page.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -309,6 +312,36 @@ syscall_handler (struct intr_frame *f UNUSED)
 			break;
 		}
 
+		case SYS_MMAP:
+		{
+			int fd = ((int *)f->esp)[1];
+			void *addr = (void *)(((int *)f->esp)[2]);
+			if (!check_address(f->esp + 4)) {
+				syscall_exit(-1);
+				break;
+			}
+			void *overlapped = lookup_page(addr);
+			if (!addr || !(addr == pg_round_down(addr)) || overlapped) {
+			// if (!addr || !(addr == pg_round_down(addr))) {
+				f->eax = -1;
+				break;
+			}
+			if (!is_user_vaddr(addr)) {
+				syscall_exit(-1);
+				break;
+			}
+
+			f->eax = syscall_mmap(fd, addr);
+			break;
+		}
+
+		case SYS_MUNMAP:
+		{
+			mapid_t mapid = (mapid_t)((int *)f->esp)[1];
+			syscall_munmap(mapid);
+			break;
+		}
+
 		default:
 		{
 			syscall_exit(-1);
@@ -465,4 +498,81 @@ int syscall_write(int fd, void *b, unsigned size){
 	int write_bytes = (int)file_write(push_fd->file_p, b, (off_t)size);
 	lock_release(&file_lock);
 	return write_bytes;
+}
+
+mapid_t syscall_mmap(int fd, void *addr) {
+	struct thread *t = thread_current();
+	struct list_elem *e;
+	struct fd *temp;
+	struct fd *found = NULL;
+
+	if (fd == 1 || fd == 0)
+		return -1;
+
+	for (e = list_begin(&t->f_list); e != list_end(&t->f_list); e = list_next(e)) {
+		temp = list_entry(e, struct fd, elem);
+		if (temp->fd == fd) {
+			found = temp;
+			break;
+		}
+	}
+	if (!found)
+		return -1;
+
+	lock_acquire(&file_lock);
+	struct file *file = file_reopen(found->file_p);
+	int filesize = file_length(file);
+	lock_release(&file_lock);
+
+	mapid_t mapid = push_mmap_table(file);
+
+	int count = 0;
+	while (filesize > count) {
+		if (pagedir_get_page(t->pagedir, addr + count))
+			return -1;
+		count += PGSIZE;
+	}
+
+	if (file == NULL)
+		return -1;
+	
+	int offset = 0;
+	while (filesize > 0) {
+		size_t page_zero_bytes = filesize < PGSIZE ? PGSIZE-filesize : 0;    
+		lazy_push_page_table(addr, file, offset, page_zero_bytes, true);
+		offset += PGSIZE;
+		filesize -= PGSIZE;
+		addr += PGSIZE;
+	}
+
+	return mapid;
+}
+
+void syscall_munmap(mapid_t mapid) {
+	struct file *file = pop_mmap_table(mapid);
+	if (file == NULL)
+		return;
+	apply_mmap_changed(file);
+}
+
+void apply_mmap_changed(struct file *file) {
+	struct thread *t = thread_current();
+	struct page_entry *pe;
+	struct list_elem *e;
+  
+	lock_acquire(&file_lock);
+	file_seek(file, 0);
+	for (e = list_begin(&t->page_table); e != list_end(&t->page_table); e = list_next(e)) {
+		pe = list_entry(e, struct page_entry, elem);
+		if (pe->file == file) {
+			if (pagedir_is_dirty(t->pagedir, pe->upage)) {
+				file_write(file, pe->upage, PGSIZE - pe->page_zero_bytes);
+			}
+			if (pe->location == FILE) {
+				list_remove(&pe->elem);
+				free(pe);
+			}
+		}
+	}
+	lock_release(&file_lock);
 }

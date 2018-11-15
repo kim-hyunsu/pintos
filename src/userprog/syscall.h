@@ -1,5 +1,6 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
+#include "lib/user/syscall.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
 
@@ -28,5 +29,8 @@ int syscall_exit(int status);
 int syscall_open(const char *file);
 int syscall_read(int fd, void *buffer, unsigned size);
 int syscall_write(int fd, void *buffer, unsigned size);
+mapid_t syscall_mmap(int fd, void *addr);
+void syscall_munmap(mapid_t mapid);
+void apply_mmap_changed(struct file *file);
 
 #endif /* userprog/syscall.h */

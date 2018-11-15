@@ -6,7 +6,8 @@
 enum location {
   PHYS,
   DISK,
-  FILE
+  FILE,
+  STACK
 };
 
 struct page_entry {
@@ -18,6 +19,7 @@ struct page_entry {
   size_t page_zero_bytes;
   bool writable;
   struct list_elem elem;
+  void **esp;
 };
 
 struct page_entry *lookup_page(uint32_t *vaddr);
@@ -26,4 +28,3 @@ bool allocate_page(void *vaddr, bool user, bool writable);
 bool lazy_loading(void *vaddr, bool user, bool writable, struct file *file, off_t offset, size_t page_zero_bytes);
 void push_page_table(void *upage, enum location);
 void lazy_push_page_table(void *upage, struct file *file, off_t offset, size_t page_zero_bytes, bool writable);
-void *swap_out(enum palloc_flags);

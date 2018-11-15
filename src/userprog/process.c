@@ -21,6 +21,7 @@
 #include "threads/malloc.h"
 #include "vm/page.h"
 #include "vm/frame.h"
+#include "vm/mmap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -277,6 +278,15 @@ process_exit (void)
     }
   }
 
+  struct list *mmap_table = &curr->mmap_table;
+  struct mmap_entry *me;
+  while(!list_empty(mmap_table)) {
+    e = list_pop_front(mmap_table);
+    me = list_entry(e, struct mmap_entry, elem);
+    apply_mmap_changed(me->file);
+    free(me);
+  }
+
   struct list *page_table = &curr->page_table;
   struct page_entry *pe;
   while(!list_empty(page_table)) {
@@ -284,13 +294,6 @@ process_exit (void)
     pe = list_entry(e, struct page_entry, elem);
     free(pe);
   }
-  // struct list *page_table = &curr->sup_page_table;
-  // struct page_entry *pe;
-  // while(!list_empty(page_table)) {
-  //   e = list_pop_front(page_table);
-  //   pe = list_entry(e, struct page_entry, elem);
-  //   free(pe);
-  // }
 
   if(curr->exe_file){
     file_allow_write(curr->exe_file);
@@ -603,7 +606,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       // /* Get a page of memory. */
       // uint8_t *kpage = palloc_get_page (PAL_USER);
       // if (kpage == NULL) {
-      //   kpage = swap_out(PAL_USER);
+      //   return false;
       // }
 
       // /* Load this page. */
@@ -620,8 +623,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       //     palloc_free_page (kpage);
       //     return false;
       //   }
-      // push_page_table(upage, PHYS);
-      // push_frame_table(upage, kpage, thread_current());
+        
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
