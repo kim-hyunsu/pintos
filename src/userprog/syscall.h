@@ -33,4 +33,11 @@ mapid_t syscall_mmap(int fd, void *addr);
 void syscall_munmap(mapid_t mapid);
 void apply_mmap_changed(struct file *file);
 
+//For Project #4
+bool syscall_chdir(const char *dir);
+bool syscall_mkdir(const char *dir);
+bool syscall_readdir(int fd, char name[15]);
+bool syscall_isdir(int fd);
+int syscall_inumber(int fd);
+
 #endif /* userprog/syscall.h */

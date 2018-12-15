@@ -26,7 +26,7 @@ struct dir_entry
 bool
 dir_create (disk_sector_t sector, size_t entry_cnt) 
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), 1);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -156,6 +156,9 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector)
   if (lookup (dir, name, NULL, NULL))
     goto done;
 
+  /* For Project #4 */
+  if(!inode_set_parent(inode_get_inumber(dir_get_inode(dir)), inode_sector)) goto done;
+
   /* Set OFS to offset of free slot.
      If there are no free slots, then it will be set to the
      current end-of-file.
@@ -201,6 +204,10 @@ dir_remove (struct dir *dir, const char *name)
   if (inode == NULL)
     goto done;
 
+  /* For Project #4 */
+  if (inode_is_dir(inode) && inode_get_open_cnt(inode) > 1) goto done;
+  if (inode_is_dir(inode) && !d_isempty(inode)) goto done;
+
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e) 
@@ -233,4 +240,25 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
         } 
     }
   return false;
+}
+
+bool d_isempty(struct inode *inode){
+  struct dir_entry de;
+  off_t pos = 0;
+  while(inode_read_at(inode, &de, sizeof de, pos) == sizeof de){
+    pos += sizeof de;
+    if(de.in_use) return false;
+  }
+  return true;
+}
+
+bool d_isroot(struct dir *dir){
+  if(dir != NULL && inode_get_inumber(dir_get_inode(dir)) == ROOT_DIR_SECTOR) return true;
+  else return false;
+}
+
+struct inode *d_parent_inode(struct dir *dir){
+  if(dir == NULL) return NULL;
+  disk_sector_t sector = inode_get_parent(dir_get_inode(dir));
+  return inode_open(sector);
 }

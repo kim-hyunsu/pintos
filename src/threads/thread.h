@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/synch.h"
+#include "filesys/directory.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -112,6 +113,9 @@ struct thread
     struct list page_table;
     struct list mmap_table;
     uint8_t *temp_stack;
+#endif
+#ifdef FILESYS
+    struct dir *dir;
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

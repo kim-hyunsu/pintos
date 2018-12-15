@@ -6,6 +6,8 @@
 #include "threads/init.h"
 #include "threads/thread.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
+#include "filesys/inode.h"
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "lib/string.h"
@@ -140,7 +142,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 			off_t init_size = (off_t)((unsigned int *)f->esp)[2];
 
 			lock_acquire(&file_lock);
-			bool success = filesys_create(file, init_size);
+			bool success = filesys_create(file, init_size, 1);
 			lock_release(&file_lock);
 			f->eax = 0;
 			f->eax = success;
@@ -339,6 +341,42 @@ syscall_handler (struct intr_frame *f UNUSED)
 		{
 			mapid_t mapid = (mapid_t)((int *)f->esp)[1];
 			syscall_munmap(mapid);
+			break;
+		}
+
+		case SYS_CHDIR:
+		{
+			const char *dir = (char *)(((int *)f->esp)[1]);
+			f->eax = (bool)syscall_chdir(dir);
+			break;
+		}
+
+		case SYS_MKDIR:
+		{
+			const char *dir = (char *)(((int *)f->esp)[1]);
+			f->eax = (bool)syscall_mkdir(dir);
+			break;
+		}
+
+		case SYS_READDIR:
+		{
+			int fd = ((int *)f->esp)[1];
+			char *name = (char *)(((int *)f->esp)[2]);
+			f->eax = (bool)syscall_readdir(fd, name);
+			break;
+		}
+
+		case SYS_ISDIR:
+		{
+			int fd = ((int *)f->esp)[1];
+			f->eax = (bool)syscall_isdir(fd);
+			break;
+		}
+
+		case SYS_INUMBER:
+		{
+			int fd = ((int *)f->esp)[1];
+			f->eax = (int)syscall_inumber(fd);
 			break;
 		}
 
@@ -575,4 +613,72 @@ void apply_mmap_changed(struct file *file) {
 		}
 	}
 	lock_release(&file_lock);
+}
+
+static struct fd *lookup_fd(int fd){
+	struct list *f_list = &thread_current()->f_list;
+	struct list_elem *e;
+	struct fd *found = NULL;
+	struct fd *match = NULL;
+
+	for (e=list_begin(f_list); e!=list_end(f_list); e=list_next(e)){
+		found = list_entry(e, struct fd, elem);
+		if(found->fd == fd){
+			match = found;
+			break;
+		}
+	}
+	return match;
+}
+
+bool syscall_chdir(const char *dir){
+	bool success;
+	lock_acquire(&file_lock);
+	success = filesys_chdir(dir);
+	lock_release(&file_lock);
+	return success;
+}
+
+bool syscall_mkdir(const char *dir){
+	bool success;
+	lock_acquire(&file_lock);
+	success = filesys_create(dir, 0, false);
+	lock_release(&file_lock);
+	return success;
+}
+
+bool syscall_readdir(int fd, char name[14 + 1]){
+	struct list_elem *e;
+	struct fd *found = NULL;
+	struct list *f_list = &thread_current()->f_list;
+	bool success = 0;
+
+	for(e=list_begin(f_list); e!=list_end(f_list); e=list_next(e)){
+		found = list_entry(e, struct fd, elem);
+		if(found->fd == fd){
+			success = 1;
+			break;
+		}
+	}
+	if(!success) return -1;
+
+	struct inode *inode = file_get_inode(found->file_p);
+	if(inode == NULL) return 0;
+	if(!inode_is_dir(inode)) return 0;
+	struct dir *dir = (struct dir *)found->file_p;
+	if(!dir_readdir(dir, name)) return 0;
+
+	return 1;
+}
+
+bool syscall_isdir(int fd){
+	struct fd *_fd = lookup_fd(fd);
+	if(!_fd) return -1;
+	return inode_is_dir(file_get_inode((struct file *)_fd->file_p));
+}
+
+int syscall_inumber(int fd){
+	struct fd *_fd = lookup_fd(fd);
+	if(!_fd) return -1;
+	return inode_get_inumber(file_get_inode((struct file *)_fd->file_p));
 }

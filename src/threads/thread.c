@@ -16,6 +16,9 @@
 #include "userprog/syscall.h"
 #include "threads/malloc.h"
 #endif
+#ifdef FILESYS
+#include "filesys/directory.h"
+#endif
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -495,7 +498,9 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->page_table);
   list_init(&t->mmap_table);
 #endif
-
+#ifdef FILESYS
+  t->dir = NULL;
+#endif
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

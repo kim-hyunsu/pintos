@@ -20,6 +20,7 @@
 #include "threads/palloc.h"
 #include "threads/pte.h"
 #include "threads/thread.h"
+#include "filesys/cache.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #include "userprog/exception.h"
@@ -29,14 +30,14 @@
 #else
 #include "tests/threads/tests.h"
 #endif
-#ifdef VM
-#include "vm/frame.h"
-#include "vm/swap.h"
-#endif
 #ifdef FILESYS
 #include "devices/disk.h"
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
+#endif
+#ifdef VM
+#include "vm/frame.h"
+#include "vm/swap.h"
 #endif
 
 /* Amount of physical memory, in 4 kB pages. */
