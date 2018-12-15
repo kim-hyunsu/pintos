@@ -212,28 +212,32 @@ thread_create (const char *name, int priority,
     return tid;
   }
 
-  struct pair *npair = (struct pair *) malloc(sizeof(struct pair));
-  npair->child_tid = tid;
-  npair->parent = cur;
-  npair->e_status = 0;
-  npair->is_exit = 0;
-  npair->success = 0;
-  sema_init(&npair->sema, 0);
-  sema_init(&npair->l_sema, 0);
+  struct pair *npair = NULL;
+  if(name[0] != '_'){
+    npair = (struct pair *) malloc(sizeof(struct pair));
+    npair->child_tid = tid;
+    npair->parent = cur;
+    npair->e_status = 0;
+    npair->is_exit = 0;
+    npair->success = 0;
+    sema_init(&npair->sema, 0);
+    sema_init(&npair->l_sema, 0);
 
-  lock_acquire(&pair_lock);
-  list_push_back(&pair_list, &npair->elem);
-  lock_release(&pair_lock);
+    lock_acquire(&pair_lock);
+    list_push_back(&pair_list, &npair->elem);
+    lock_release(&pair_lock);
+  }
 
   // Project #1
   thread_unblock(t);
   if (cur->priority <= t->priority)
     thread_yield();
 
-  sema_down(&npair->l_sema);
-
-  if(!npair->success)
-    tid = -1;
+  if(name[0] != '_'){
+    sema_down(&npair->l_sema);
+    if(!npair->success)
+      tid=-1;
+  }
 
   return tid;
 }

@@ -7,6 +7,7 @@
 void syscall_init (void);
 
 #define CODE_BASE 0x8048000
+#define READDIR_MAX_LEN 14
 
 // Project #2
 struct pair
@@ -36,7 +37,7 @@ void apply_mmap_changed(struct file *file);
 //For Project #4
 bool syscall_chdir(const char *dir);
 bool syscall_mkdir(const char *dir);
-bool syscall_readdir(int fd, char name[15]);
+bool syscall_readdir(int fd, char name[READDIR_MAX_LEN + 1]);
 bool syscall_isdir(int fd);
 int syscall_inumber(int fd);
 

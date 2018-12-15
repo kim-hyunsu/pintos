@@ -299,7 +299,10 @@ syscall_handler (struct intr_frame *f UNUSED)
 				if(push_fd->fd == fd){
 					valid = 1;
 					lock_acquire(&file_lock);
-					file_close(push_fd->file_p);
+					if(inode_is_dir(file_get_inode(push_fd->file_p)))
+						dir_close((struct dir *)push_fd->file_p);
+					else
+						file_close(push_fd->file_p);
 					lock_release(&file_lock);
 
 					list_remove(e);
@@ -470,6 +473,7 @@ int syscall_open(const char *file){
 }
 
 int syscall_read(int fd, void *b, unsigned size){
+	timer_sleep(10);
 	struct thread *cur = thread_current();
 	struct list_elem *e;
 	bool success = 0;
@@ -502,6 +506,9 @@ int syscall_read(int fd, void *b, unsigned size){
 
 	if(!success)
 		return -2;
+
+	if(inode_is_dir(file_get_inode(push_fd->file_p)))
+		return -1;
 
 	lock_acquire(&file_lock);
 	int read_bytes = (int)file_read(push_fd->file_p, b, (off_t)size);
@@ -555,6 +562,9 @@ mapid_t syscall_mmap(int fd, void *addr) {
 		}
 	}
 	if (!found)
+		return -1;
+
+	if(inode_is_dir(file_get_inode(temp->file_p)))
 		return -1;
 
 	lock_acquire(&file_lock);
@@ -647,7 +657,7 @@ bool syscall_mkdir(const char *dir){
 	return success;
 }
 
-bool syscall_readdir(int fd, char name[14 + 1]){
+bool syscall_readdir(int fd, char name[READDIR_MAX_LEN + 1]){
 	struct list_elem *e;
 	struct fd *found = NULL;
 	struct list *f_list = &thread_current()->f_list;

@@ -108,7 +108,7 @@ filesys_create (const char *name, off_t initial_size, bool is_file)
   /* For Project #4 */
   if(!strcmp(name, "")) return false;
   disk_sector_t inode_sector = 0;
-  struct dir *root=NULL;
+  struct dir *root;
   if(name[0] == '/' || !thread_current()->dir){
     root = dir_open_root();
   }else{
@@ -140,7 +140,7 @@ filesys_open (const char *name)
 {
   /* For Project #4 */
   if(!strcmp(name, "")) return NULL;
-  struct dir *root=NULL;
+  struct dir *root;
   if(name[0] == '/' || !thread_current()->dir){
     root = dir_open_root();
   }else{
@@ -148,7 +148,7 @@ filesys_open (const char *name)
   }
 
   struct dir *dir;
-  struct inode *inode = NULL;
+  struct inode *inode;
   char target[NAME_MAX+1];
   if(!strcmp(name, "/")){
     dir = dir_open_root();
