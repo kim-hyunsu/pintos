@@ -320,11 +320,13 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_MMAP:
 		{
 			int fd = ((int *)f->esp)[1];
-			void *addr = (void *)(((int *)f->esp)[2]);
+
 			if (!check_address(f->esp + 4)) {
 				syscall_exit(-1);
 				break;
 			}
+
+			void *addr = (void *)(((int *)f->esp)[2]);
 			void *overlapped = lookup_page(addr);
 			if (!addr || !(addr == pg_round_down(addr)) || overlapped) {
 			// if (!addr || !(addr == pg_round_down(addr))) {
@@ -564,9 +566,6 @@ mapid_t syscall_mmap(int fd, void *addr) {
 	if (!found)
 		return -1;
 
-	if(inode_is_dir(file_get_inode(temp->file_p)))
-		return -1;
-
 	lock_acquire(&file_lock);
 	struct file *file = file_reopen(found->file_p);
 	int filesize = file_length(file);
@@ -660,10 +659,10 @@ bool syscall_mkdir(const char *dir){
 bool syscall_readdir(int fd, char name[READDIR_MAX_LEN + 1]){
 	struct list_elem *e;
 	struct fd *found = NULL;
-	struct list *f_list = &thread_current()->f_list;
+	struct thread *cur = thread_current();
 	bool success = 0;
 
-	for(e=list_begin(f_list); e!=list_end(f_list); e=list_next(e)){
+	for(e=list_begin(&cur->f_list); e!=list_end(&cur->f_list); e=list_next(e)){
 		found = list_entry(e, struct fd, elem);
 		if(found->fd == fd){
 			success = 1;

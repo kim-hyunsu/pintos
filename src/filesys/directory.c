@@ -150,14 +150,15 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector)
 
   /* Check NAME for validity. */
   if (*name == '\0' || strlen (name) > NAME_MAX)
-    return false;
+    goto done;
 
   /* Check that NAME is not in use. */
   if (lookup (dir, name, NULL, NULL))
     goto done;
 
   /* For Project #4 */
-  if(!inode_set_parent(inode_get_inumber(dir_get_inode(dir)), inode_sector)) goto done;
+  if(!inode_set_parent(inode_get_inumber(dir_get_inode(dir)), inode_sector)) 
+    goto done;
 
   /* Set OFS to offset of free slot.
      If there are no free slots, then it will be set to the

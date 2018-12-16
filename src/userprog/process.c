@@ -273,7 +273,9 @@ process_exit (void)
       free(remain_fd);
     }
     else{
-      file_close(remain_fd->file_p);
+      if(!inode_is_dir(file_get_inode(remain_fd->file_p))){
+        file_close(remain_fd->file_p);
+      }
       free(remain_fd);
     }
   }
