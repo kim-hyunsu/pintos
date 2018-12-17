@@ -232,20 +232,6 @@ inode_create (disk_sector_t sector, off_t length, int isdir)
         success = true;
       }
 
-      // if (free_map_allocate (sectors, &disk_inode->start))
-      //   {
-      //     disk_write (filesys_disk, sector, disk_inode);
-      //     if (sectors > 0) 
-      //       {
-      //         static char zeros[DISK_SECTOR_SIZE];
-      //         size_t i;
-              
-      //         for (i = 0; i < sectors; i++) 
-      //           disk_write (filesys_disk, disk_inode->start + i, zeros); 
-      //       }
-      //     success = true; 
-      //   }
-
       free (disk_inode);
     }
   return success;

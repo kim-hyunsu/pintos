@@ -540,6 +540,8 @@ int syscall_write(int fd, void *b, unsigned size){
 	}
 
 	if(!success) return -1;
+	if(inode_is_dir(file_get_inode(push_fd->file_p)))
+		return -1;
 
 	lock_acquire(&file_lock);
 	int write_bytes = (int)file_write(push_fd->file_p, b, (off_t)size);

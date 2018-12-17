@@ -21,7 +21,7 @@ void c_init(void) {
 
 static void periodic_flush(void *aux UNUSED){
 	while(1){
-		timer_sleep(5*TIMER_FREQ);
+		timer_sleep(30*TIMER_FREQ);
 		c_flush();
 	}
 }
