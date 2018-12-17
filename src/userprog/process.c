@@ -274,6 +274,7 @@ process_exit (void)
     }
     else{
       if(!inode_is_dir(file_get_inode(remain_fd->file_p))){
+      } else {
         file_close(remain_fd->file_p);
       }
       free(remain_fd);
@@ -443,7 +444,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
-      printf ("load: %s: error loading executable\n", file_name);
+      // printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
 

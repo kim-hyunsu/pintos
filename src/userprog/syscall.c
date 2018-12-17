@@ -338,7 +338,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 				break;
 			}
 
-			f->eax = syscall_mmap(fd, addr);
+			f->eax = (mapid_t)syscall_mmap(fd, addr);
 			break;
 		}
 
@@ -568,10 +568,11 @@ mapid_t syscall_mmap(int fd, void *addr) {
 
 	lock_acquire(&file_lock);
 	struct file *file = file_reopen(found->file_p);
-	int filesize = file_length(file);
 	lock_release(&file_lock);
 
 	mapid_t mapid = push_mmap_table(file);
+
+	int filesize = file_length(file);
 
 	int count = 0;
 	while (filesize > count) {
