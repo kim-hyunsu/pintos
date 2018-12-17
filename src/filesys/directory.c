@@ -94,7 +94,7 @@ lookup (const struct dir *dir, const char *name,
 {
   struct dir_entry e;
   size_t ofs;
-  
+
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
@@ -126,8 +126,9 @@ dir_lookup (const struct dir *dir, const char *name,
 
   if (lookup (dir, name, &e, NULL))
     *inode = inode_open (e.inode_sector);
-  else
+  else{
     *inode = NULL;
+  }
 
   return *inode != NULL;
 }
@@ -244,22 +245,26 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 }
 
 bool d_isempty(struct inode *inode){
-  struct dir_entry de;
+  struct dir_entry e;
   off_t pos = 0;
-  while(inode_read_at(inode, &de, sizeof de, pos) == sizeof de){
-    pos += sizeof de;
-    if(de.in_use) return false;
+
+  while(inode_read_at(inode, &e, sizeof e, pos) == sizeof e){
+    pos += sizeof e;
+    if(e.in_use) 
+      return false;
   }
   return true;
 }
 
 bool d_isroot(struct dir *dir){
-  if(dir != NULL && inode_get_inumber(dir_get_inode(dir)) == ROOT_DIR_SECTOR) return true;
+  if(dir != NULL && inode_get_inumber(dir_get_inode(dir)) == ROOT_DIR_SECTOR) 
+    return true;
   else return false;
 }
 
-struct inode *d_parent_inode(struct dir *dir){
-  if(dir == NULL) return NULL;
+struct inode* d_parent_inode(struct dir* dir){
+  if(dir == NULL) 
+    return NULL;
   disk_sector_t sector = inode_get_parent(dir_get_inode(dir));
   return inode_open(sector);
 }

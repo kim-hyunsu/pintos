@@ -114,7 +114,8 @@ filesys_create (const char *name, off_t initial_size, bool is_file)
     return false;
 
   disk_sector_t inode_sector = 0;
-  struct dir *root;
+
+  struct dir* root;
   if(name[0] == '/' || !thread_current()->dir){
     root = dir_open_root();
   }else{
@@ -126,10 +127,11 @@ filesys_create (const char *name, off_t initial_size, bool is_file)
   char target[NAME_MAX+1];
   if(!filesys_d_lookup(root, name, &inode, &dir, target)) 
     return false;
+
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && (is_file? inode_create (inode_sector, initial_size, 0) : dir_create(inode_sector, 200))
-                  && dir_add (dir, name, inode_sector));
+                  && dir_add (dir, target, inode_sector));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
@@ -165,6 +167,7 @@ filesys_open (const char *name)
       dir_close(dir);
     return (struct file *)root;
   }
+
   filesys_d_lookup(root, name, &inode, &dir, target);
 
   if (dir != NULL){
@@ -180,16 +183,19 @@ filesys_open (const char *name)
   }
 
   dir_close (dir);
-  if(!inode) 
+  
+  if(!inode){
     return NULL;
-  if(inode_is_dir(inode)) 
+  }
+  if(inode_is_dir(inode)){
     return (struct file*)dir_open(inode);
+  } 
 
   return file_open (inode);
 }
 
 /* For Project #4 */
-struct dir* filesys_d_open(const char *name){
+struct dir *filesys_d_open(const char *name){
   struct dir* root;
   if(name[0] == '/' || !thread_current()->dir){
     root = dir_open_root();
@@ -201,9 +207,12 @@ struct dir* filesys_d_open(const char *name){
   char target[NAME_MAX+1];
   filesys_d_lookup(root, name, &inode, &dir, target);
 
-  if(dir != NULL) dir_lookup(dir, target, &inode);
+  if(dir != NULL) 
+    dir_lookup(dir, target, &inode);
   dir_close(dir);
-  if(!inode) return NULL;
+  if(!inode) 
+    return NULL;
+
   return dir_open(inode);
 }
 
@@ -215,7 +224,9 @@ bool
 filesys_remove (const char *name) 
 {
   /* For Project #4 */
-  if(!strcmp(name, "/")) return false;
+  if(!strcmp(name, "/")) 
+    return false;
+
   struct dir* root;
   if(name[0] == '/' || !thread_current()->dir){
     root = dir_open_root();
@@ -226,9 +237,10 @@ filesys_remove (const char *name)
   struct inode *inode;
   struct dir *dir;
   char target[NAME_MAX+1];
-  if(!filesys_d_lookup(root, name, &inode, &dir, target)) return false;
+  if(!filesys_d_lookup(root, name, &inode, &dir, target)) 
+    return false;
 
-  bool success = dir != NULL && dir_remove (dir, name);
+  bool success = dir != NULL && dir_remove (dir, target);
   dir_close (dir); 
 
   return success;

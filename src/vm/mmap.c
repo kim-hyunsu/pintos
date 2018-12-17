@@ -20,7 +20,7 @@ mapid_t push_mmap_table(struct file *file) {
     break;
   }
 
-  me = calloc(1, sizeof(struct mmap_entry));
+  me = (struct mmap_entry *)calloc(1, sizeof(struct mmap_entry));
   me->mapid = mapid;
   me->file = file;
   list_push_back(&t->mmap_table, &me->elem);
