@@ -10,6 +10,7 @@
 #include "userprog/tss.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
+#include "filesys/inode.h"
 #include "filesys/filesys.h"
 #include "threads/flags.h"
 #include "threads/init.h"
@@ -273,7 +274,7 @@ process_exit (void)
       free(remain_fd);
     }
     else{
-      if(!inode_is_dir(file_get_inode(remain_fd->file_p))){
+      if(inode_is_dir(file_get_inode(remain_fd->file_p))){
       } else {
         file_close(remain_fd->file_p);
       }
