@@ -7,14 +7,6 @@
 
 struct bitmap;
 
-// For Proejct #4
-#define DISK_NUM 14
-#define MAX_SIZE 8*1024*8192
-#define INIT_SECTOR 0xffffffff
-
-#define D_DISKS 12
-#define ID_DISKS 128
-
 void inode_init (void);
 bool inode_create (disk_sector_t sector, off_t length, int isdir);
 struct inode *inode_open (disk_sector_t);
