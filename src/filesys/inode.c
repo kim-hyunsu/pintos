@@ -25,10 +25,8 @@
    Must be exactly DISK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
-    // disk_sector_t start;                /* First data sector. */
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */    
-    // uint32_t unused[125];               /* Not used. */
     uint32_t unused[107];
     int isdir;
     uint32_t d_index;
@@ -54,8 +52,6 @@ struct inode
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
-    // struct inode_disk data;             /* Inode content. */
-
     //For Project #4
     off_t length;
     off_t r_length;
@@ -75,9 +71,16 @@ struct id_disk{
 
 bool disk_alloc(struct inode_disk *disk_inode);
 void disk_dalloc(struct inode *inode);
+size_t d_disk_write(struct inode *inode, size_t sectors);
+size_t id_disk_write(struct inode *inode, size_t sectors, struct id_disk *id_disk);
+size_t d_id_disk_write(struct inode *inode, size_t sectors, struct id_disk *d_id_disk);
 off_t inode_extend(struct inode *inode, off_t length);
 size_t idisk_extend(struct inode *inode, size_t sectors);
-void id_dalloc(disk_sector_t *disks, size_t id_disk, size_t sectors);  
+
+/* deallocation functions */
+size_t d_disk_free(struct inode *inode, size_t sectors, uint32_t i);
+size_t id_disk_free(struct inode *inode, size_t sectors, uint32_t i);
+void d_id_disk_free(disk_sector_t *disks, size_t id_disk, size_t sectors);
 
 
 /* Returns the disk sector that contains byte offset POS within
@@ -96,18 +99,23 @@ byte_to_sector (const struct inode *inode, off_t length, off_t pos)
     int i;
     disk_sector_t id_disk[ID_DISKS];
 
+    //d_disk
     if (pos < d_limit) {
       return inode->disks[pos/DISK_SECTOR_SIZE];
     } 
+
+    //id_disk
     else if (pos < d_limit + id_limit){
       pos -= d_limit;
-      i = pos/id_limit + D_DISKS;
-      disk_read(filesys_disk, inode->disks[i], &id_disk);
+      i = 12;
+      disk_read(filesys_disk, inode->disks[12], &id_disk);
       pos = pos % id_limit;
       return id_disk[pos/DISK_SECTOR_SIZE];
-    } 
+    }
+
+    //d_id_disk
     else{
-      disk_read(filesys_disk, inode->disks[D_DISKS+1], &id_disk);
+      disk_read(filesys_disk, inode->disks[13], &id_disk);
       pos -= (d_limit + id_limit);
       i = pos/id_limit;
       disk_read(filesys_disk, id_disk[i], &id_disk);
@@ -163,27 +171,17 @@ void disk_dalloc(struct inode *inode){
   uint32_t i = 0;
 
   while(sectors && i < D_DISKS){
-    free_map_release(inode->disks[i], 1);
-    sectors--;
+    sectors = d_disk_free(inode, sectors, i);
     i++;
   }
   while(id_disk && i < D_DISKS+1){
-    size_t id_sectors = sectors < ID_DISKS ? sectors : ID_DISKS;
-    uint32_t j = 0;
-    struct id_disk r_id_disk;
-    disk_read(filesys_disk, &inode->disks[i], &r_id_disk);
-    while(j < id_sectors){
-      free_map_release(r_id_disk.disks[j], 1);
-      j++;
-    }
-    free_map_release(&inode->disks[i], 1);
-    sectors -= id_sectors;
+    sectors = id_disk_free(inode, sectors, i);
     id_disk--;
     i++;
   }
 
   if(check_disk(inode->length, false)) 
-    id_dalloc(&inode->disks[i], id_disk, sectors);
+    d_id_disk_free(&inode->disks[i], id_disk, sectors);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -521,18 +519,16 @@ inode_length (const struct inode *inode)
   return inode->length;
 }
 
+/* allocation functions */
+
 off_t inode_extend(struct inode *inode, off_t length){
-  static char zero[DISK_SECTOR_SIZE];
   size_t sectors = bytes_to_sectors(length) - bytes_to_sectors(inode->length);
 
   if(sectors == 0) 
     return length;
   
   while(inode->d_index < D_DISKS){
-    free_map_allocate(1, &inode->disks[inode->d_index]);
-    disk_write(filesys_disk, inode->disks[inode->d_index], zero);
-    inode->d_index++;
-    sectors--;
+    sectors = d_disk_write(inode, sectors);
     if(sectors == 0) 
       return length;
   } 
@@ -544,15 +540,10 @@ off_t inode_extend(struct inode *inode, off_t length){
     } else {
       disk_read(filesys_disk, inode->disks[inode->d_index], &id_disk);
     }
+    sectors = id_disk_write(inode, sectors, &id_disk);
 
-    while(inode->id_index < ID_DISKS){
-      free_map_allocate(1, &id_disk.disks[inode->id_index]);
-      disk_write(filesys_disk, id_disk.disks[inode->id_index], zero);
-      inode->id_index++;
-      sectors--;
-      if(sectors == 0) break;
-    }
     disk_write(filesys_disk, inode->disks[inode->d_index], &id_disk);
+    
     if(inode->id_index == ID_DISKS){
       inode->id_index = 0;
       inode->d_index++;
@@ -570,7 +561,6 @@ off_t inode_extend(struct inode *inode, off_t length){
 
 size_t idisk_extend(struct inode *inode, size_t sectors){
   struct id_disk id_disk;
-  static char zero[DISK_SECTOR_SIZE];
   if(inode->id_index == 0 && inode->d_id_index == 0) free_map_allocate(1, &inode->disks[inode->d_index]);
   else disk_read(filesys_disk, inode->disks[inode->d_index], &id_disk);
 
@@ -581,19 +571,10 @@ size_t idisk_extend(struct inode *inode, size_t sectors){
     } else{
       disk_read(filesys_disk, id_disk.disks[inode->id_index], &d_id_disk);
     }
-    while(inode->d_id_index < ID_DISKS){
-      free_map_allocate(1, &d_id_disk.disks[inode->d_id_index]);
-      disk_write(filesys_disk, d_id_disk.disks[inode->d_id_index], zero);
-      inode->d_id_index++;
-      sectors--;
-      if(sectors == 0) break;
-    }
+    
+    sectors = d_id_disk_write(inode, sectors, &d_id_disk);
 
     disk_write(filesys_disk, id_disk.disks[inode->id_index], &d_id_disk);
-    if(inode->d_id_index == ID_DISKS){
-      inode->d_id_index == 0;
-      inode->id_index++;
-    }
 
     if(sectors == 0) break;
   }
@@ -601,7 +582,73 @@ size_t idisk_extend(struct inode *inode, size_t sectors){
   return sectors;
 }
 
-void id_dalloc(disk_sector_t *disks, size_t id_disk, size_t sectors){
+size_t d_disk_write(struct inode *inode, size_t sectors){
+  static char zero[DISK_SECTOR_SIZE];
+  free_map_allocate(1, &inode->disks[inode->d_index]);
+  disk_write(filesys_disk, inode->disks[inode->d_index], zero);
+  inode->d_index++;
+  sectors--;
+  return sectors;
+}
+
+size_t id_disk_write(struct inode *inode, size_t sectors, struct id_disk *id_disk){
+  static char zero[DISK_SECTOR_SIZE];
+  while(inode->id_index < ID_DISKS){
+    free_map_allocate(1, &id_disk->disks[inode->id_index]);
+    disk_write(filesys_disk, id_disk->disks[inode->id_index], zero);
+    inode->id_index++;
+    sectors--;
+    if(sectors == 0){
+      break;
+    }
+  }
+  return sectors;
+}
+
+size_t d_id_disk_write(struct inode *inode, size_t sectors, struct id_disk *d_id_disk){
+  static char zero[DISK_SECTOR_SIZE];
+  while(inode->d_id_index < ID_DISKS){
+    free_map_allocate(1, &d_id_disk->disks[inode->d_id_index]);
+    disk_write(filesys_disk, d_id_disk->disks[inode->d_id_index], zero);
+    inode->d_id_index++;
+    sectors--;
+    if(sectors == 0){
+      break;
+    }
+  }
+  return sectors;
+}
+
+/* deallocation functions */
+
+size_t d_disk_free(struct inode *inode, size_t sectors, uint32_t i){
+  free_map_release(inode->disks[i], 1);
+  sectors --;
+  return sectors;
+}
+
+size_t id_disk_free(struct inode *inode, size_t sectors, uint32_t i){
+  size_t remain = 0;
+  uint32_t j = 0;
+  struct id_disk id_disk;
+  if(sectors < ID_DISKS){
+    remain = sectors;
+  } else{
+    remain = ID_DISKS;
+  }
+  disk_read(filesys_disk, &inode->disks[i], &id_disk);
+
+  while(j < remain){
+    free_map_release(id_disk.disks[j], 1);
+    j++;
+  }
+
+  free_map_release(&inode->disks[i], 1);
+  sectors -= remain;
+  return sectors;
+}
+
+void d_id_disk_free(disk_sector_t *disks, size_t id_disk, size_t sectors){
   uint32_t i = 0;
   struct id_disk d_id_disk;
   disk_read(filesys_disk, *disks, &d_id_disk);
